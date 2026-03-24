@@ -11,6 +11,7 @@ import {
 import {
   getAllTasks,
   getDueTasks,
+  getMessagesSince,
   getTaskById,
   logTaskRun,
   updateTask,
@@ -185,8 +186,11 @@ async function runTask(
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
-          // Forward result to user (sendMessage handles formatting)
-          await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          // Silent tasks write to the workspace but don't message the user
+          const isSilent = task.prompt.includes('[silent]');
+          if (!isSilent) {
+            await deps.sendMessage(task.chat_jid, streamedOutput.result);
+          }
           scheduleClose();
         }
         if (streamedOutput.status === 'success') {
@@ -260,6 +264,29 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
         const currentTask = getTaskById(task.id);
         if (!currentTask || currentTask.status !== 'active') {
           continue;
+        }
+
+        // Skip proactive check-ins if there's been recent conversation
+        if (currentTask.id.startsWith('proactive-')) {
+          const oneHourAgo = new Date(
+            Date.now() - 60 * 60 * 1000,
+          ).toISOString();
+          const recent = getMessagesSince(
+            currentTask.chat_jid,
+            oneHourAgo,
+            `${ASSISTANT_NAME}`,
+            1,
+          );
+          if (recent.length > 0) {
+            logger.info(
+              { taskId: currentTask.id },
+              'Skipping proactive check-in — recent conversation activity',
+            );
+            // Advance next_run so it doesn't fire again immediately
+            const nextRun = computeNextRun(currentTask);
+            updateTaskAfterRun(currentTask.id, nextRun, 'skipped: recent activity');
+            continue;
+          }
         }
 
         deps.queue.enqueueTask(currentTask.chat_jid, currentTask.id, () =>
