@@ -284,7 +284,11 @@ export function startSchedulerLoop(deps: SchedulerDependencies): void {
             );
             // Advance next_run so it doesn't fire again immediately
             const nextRun = computeNextRun(currentTask);
-            updateTaskAfterRun(currentTask.id, nextRun, 'skipped: recent activity');
+            updateTaskAfterRun(
+              currentTask.id,
+              nextRun,
+              'skipped: recent activity',
+            );
             continue;
           }
         }
