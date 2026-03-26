@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     openssh-client \
+    oathtool \
     unzip \
     wget \
     openjdk-17-jdk-headless \
