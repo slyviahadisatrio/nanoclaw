@@ -186,8 +186,12 @@ async function runTask(
       async (streamedOutput: ContainerOutput) => {
         if (streamedOutput.result) {
           result = streamedOutput.result;
-          // Silent tasks write to the workspace but don't message the user
-          const isSilent = task.prompt.includes('[silent]');
+          // Silent tasks write to the workspace but don't message the user.
+          // [silent] can appear in the task prompt (always silent) or in the
+          // agent's output (agent chose to suppress this particular response).
+          const isSilent =
+            task.prompt.includes('[silent]') ||
+            streamedOutput.result.includes('[silent]');
           if (!isSilent) {
             await deps.sendMessage(task.chat_jid, streamedOutput.result);
           }
