@@ -8,7 +8,7 @@ import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
-import { RegisteredGroup } from './types.js';
+import { Channel, RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -23,6 +23,7 @@ export interface IpcDeps {
     registeredJids: Set<string>,
   ) => void;
   onTasksChanged: () => void;
+  channels?: Channel[];
 }
 
 let ipcWatcherRunning = false;
@@ -90,6 +91,42 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (
+                data.type === 'reaction' &&
+                data.chatJid &&
+                data.messageId &&
+                data.emoji
+              ) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  const channel = deps.channels?.find(
+                    (c: any) => c.ownsJid(data.chatJid) && c.setReaction,
+                  );
+                  if (channel?.setReaction) {
+                    await channel.setReaction(
+                      data.chatJid,
+                      data.messageId,
+                      data.emoji,
+                    );
+                    logger.info(
+                      {
+                        chatJid: data.chatJid,
+                        messageId: data.messageId,
+                        emoji: data.emoji,
+                        sourceGroup,
+                      },
+                      'IPC reaction sent',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC reaction attempt blocked',
                   );
                 }
               }

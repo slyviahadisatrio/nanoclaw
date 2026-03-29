@@ -264,6 +264,50 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:location', (ctx) => storeNonText(ctx, '[Location]'));
     this.bot.on('message:contact', (ctx) => storeNonText(ctx, '[Contact]'));
 
+    // Handle reactions
+    this.bot.on('message_reaction', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const update = ctx.messageReaction;
+      const newReactions = update.new_reaction || [];
+      if (newReactions.length === 0) return;
+
+      const emojis = newReactions
+        .map((r: any) => (r.type === 'emoji' ? r.emoji : r.custom_emoji_id))
+        .filter(Boolean)
+        .join('');
+      const senderName =
+        update.user?.first_name ||
+        update.user?.username ||
+        update.user?.id?.toString() ||
+        'Unknown';
+      const timestamp = new Date(update.date * 1000).toISOString();
+      const msgId = update.message_id.toString();
+
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
+      this.opts.onMessage(chatJid, {
+        id: `reaction-${msgId}-${Date.now()}`,
+        chat_jid: chatJid,
+        sender: update.user?.id?.toString() || '',
+        sender_name: senderName,
+        content: `[Reacted ${emojis} to message ${msgId}]`,
+        timestamp,
+        is_from_me: false,
+      });
+
+      logger.debug({ chatJid, emojis, msgId }, 'Telegram reaction stored');
+    });
+
     // Handle errors gracefully
     this.bot.catch((err) => {
       logger.error({ err: err.message }, 'Telegram bot error');
@@ -338,6 +382,25 @@ export class TelegramChannel implements Channel {
       await this.bot.api.sendChatAction(numericId, 'typing');
     } catch (err) {
       logger.debug({ jid, err }, 'Failed to send Telegram typing indicator');
+    }
+  }
+
+  async setReaction(
+    jid: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    if (!this.bot) return;
+    try {
+      const numericId = jid.replace(/^tg:/, '');
+      await this.bot.api.setMessageReaction(
+        numericId,
+        parseInt(messageId, 10),
+        [{ type: 'emoji', emoji } as any],
+      );
+      logger.info({ jid, messageId, emoji }, 'Telegram reaction sent');
+    } catch (err) {
+      logger.error({ jid, messageId, emoji, err }, 'Failed to send Telegram reaction');
     }
   }
 }
