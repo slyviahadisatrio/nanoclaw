@@ -400,7 +400,10 @@ export class TelegramChannel implements Channel {
       );
       logger.info({ jid, messageId, emoji }, 'Telegram reaction sent');
     } catch (err) {
-      logger.error({ jid, messageId, emoji, err }, 'Failed to send Telegram reaction');
+      logger.error(
+        { jid, messageId, emoji, err },
+        'Failed to send Telegram reaction',
+      );
     }
   }
 }
