@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
+import path from 'path';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
@@ -108,6 +109,29 @@ async function runTask(
     { taskId: task.id, group: task.group_folder },
     'Running scheduled task',
   );
+
+  // Write recent conversations to workspace so scheduled tasks can reflect on them
+  try {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recentMessages = getMessagesSince(
+      task.chat_jid,
+      oneDayAgo,
+      `${ASSISTANT_NAME}`,
+      100,
+    );
+    if (recentMessages.length > 0) {
+      const lines = recentMessages.map(
+        (m) => `[${m.timestamp}] ${m.sender_name}: ${m.content}`,
+      );
+      fs.writeFileSync(
+        path.join(groupDir, 'recent-conversations.txt'),
+        lines.join('\n'),
+        'utf-8',
+      );
+    }
+  } catch (err) {
+    logger.debug({ err, taskId: task.id }, 'Failed to write recent conversations');
+  }
 
   const groups = deps.registeredGroups();
   const group = Object.values(groups).find(
